@@ -1,0 +1,38 @@
+// build.gradle del plugin VENDORIZADO (copia local de flutter_bluetooth_serial 0.4.0),
+// modernizado para AGP 9 / Gradle 9 / Flutter 3.44.
+//
+// Cambios respecto al original:
+//   - Se elimina el bloque buildscript con classpath AGP 4.1.0 y jcenter()
+//     (Gradle 9 eliminó jcenter(); además la AGP la provee el included-build de Flutter).
+//   - Se declara `namespace` (obligatorio en AGP 8+; el plugin no lo tenía).
+//   - compileSdk 30 -> 36 (AGP 9 rechaza niveles obsoletos; 36 es el de la app).
+//   - Java 1.8 -> 17 (alineado con la app).
+//   - `lintOptions {}` -> `lint {}` (renombrado en AGP 8+; removido en AGP 9).
+//   - Se quita buildToolsVersion fijo '30.0.3' (AGP elige la instalada).
+group 'io.github.edufolly.flutterbluetoothserial'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'io.github.edufolly.flutterbluetoothserial'
+    compileSdk 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk 21
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    lint {
+        disable 'InvalidPackage'
+    }
+
+    dependencies {
+        implementation 'androidx.appcompat:appcompat:1.6.1'
+    }
+}
