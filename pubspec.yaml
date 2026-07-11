@@ -56,6 +56,11 @@ dependencies:
   # fotos sobreviven a una reinstalación (que borra el almacenamiento privado) y
   # quedan incluidas en el backup de la nube (Google Fotos / Samsung Cloud).
   gal: ^2.3.0
+  # Importar el historial desde un CSV (restaurar mediciones tras una
+  # reinstalación). file_picker: elegir el archivo; csv: parseo robusto que
+  # respeta comillas y comas dentro de los campos.
+  file_picker: ^8.0.0
+  csv: ^6.0.0
 
 dev_dependencies:
   flutter_test:

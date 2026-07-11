@@ -6,8 +6,10 @@
 //  Los colores salen del Theme (tema.dart) para verse bien en claro/oscuro.
 // =====================================================================
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../datos/base_datos.dart';
@@ -102,6 +104,59 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  // Importa el historial desde un CSV elegido por el usuario. Reinserta las
+  // mediciones (recalculando la condición con el clasificador actual), evita
+  // duplicados por fecha_hora y refresca la lista. Ver BaseDatos.importarCsv.
+  Future<void> _importarCsv() async {
+    FilePickerResult? seleccion;
+    try {
+      seleccion = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        withData: true, // trae los bytes (más confiable que la ruta en Android)
+      );
+    } catch (e) {
+      _aviso('No se pudo abrir el selector de archivos: $e');
+      return;
+    }
+    if (seleccion == null || seleccion.files.isEmpty) return; // cancelado
+
+    final archivo = seleccion.files.single;
+    String? contenido;
+    try {
+      if (archivo.bytes != null) {
+        contenido = utf8.decode(archivo.bytes!, allowMalformed: true);
+      } else if (archivo.path != null) {
+        contenido = await File(archivo.path!).readAsString();
+      }
+    } catch (e) {
+      _aviso('No se pudo leer el archivo: $e');
+      return;
+    }
+    if (contenido == null) {
+      _aviso('No se pudo leer el archivo seleccionado.');
+      return;
+    }
+
+    final int importadas;
+    try {
+      importadas = await BaseDatos.instancia.importarCsv(contenido);
+    } catch (e) {
+      _aviso('Error al importar el CSV: $e');
+      return;
+    }
+
+    if (!mounted) return;
+    setState(_recargar);
+    _aviso('$importadas mediciones importadas');
+  }
+
+  void _aviso(String mensaje) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(mensaje)));
+  }
+
   // Nombre público "<terreno>_<punto>_<fecha>" saneado (sin espacios ni
   // caracteres que rompan un nombre de archivo).
   String _nombrePublico(Medicion m) {
@@ -125,6 +180,11 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
       appBar: AppBar(
         title: const Text('Historial de mediciones'),
         actions: [
+          IconButton(
+            tooltip: 'Importar CSV',
+            icon: const Icon(Icons.file_upload_outlined),
+            onPressed: _importarCsv,
+          ),
           IconButton(
             tooltip: 'Exportar CSV',
             icon: const Icon(Icons.file_download_outlined),

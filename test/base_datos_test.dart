@@ -97,6 +97,38 @@ void main() {
     expect(csv, contains('"/data/fotos/foto_norte.jpg"')); // la ruta de la foto
   });
 
+  test('importarCsv: reclasifica, deduplica y maneja campos vacíos', () async {
+    // La columna "condicion" del CSV está a propósito EQUIVOCADA para verificar
+    // que se recalcula con el clasificador actual. ph vacío en la 2da fila.
+    const csv =
+        'id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,observaciones,condicion,foto\n'
+        '1,Terreno A,P1,2026-06-29T10:00:00,56,23.8,740,6.8,5,"obs, con coma",normal,\n'
+        '2,Terreno B,P2,2026-06-29T11:00:00,40,22.0,40,,5,sin ph,critico,\n';
+
+    final n = await BaseDatos.instancia.importarCsv(csv);
+    expect(n, 2);
+
+    final todas = await BaseDatos.instancia.obtenerTodas();
+    expect(todas.length, 2);
+
+    // ce=740 con la escala de corrosividad => crítico (el CSV decía "normal").
+    final p1 = todas.firstWhere((m) => m.punto == 'P1');
+    expect(p1.condicion, 'crítico');
+    expect(p1.ph, 6.8);
+    expect(p1.foto, ''); // foto vacía -> cadena vacía
+    expect(p1.observaciones, 'obs, con coma'); // coma dentro de comillas
+
+    // ce=40 => normal (el CSV decía "critico"); ph vacío -> null.
+    final p2 = todas.firstWhere((m) => m.punto == 'P2');
+    expect(p2.condicion, 'normal');
+    expect(p2.ph, isNull);
+
+    // Reimportar el MISMO csv no duplica (dedup por fecha_hora).
+    final n2 = await BaseDatos.instancia.importarCsv(csv);
+    expect(n2, 0);
+    expect((await BaseDatos.instancia.obtenerTodas()).length, 2);
+  });
+
   test('Medicion.toMap/fromMap es ida y vuelta', () {
     final original = Medicion(
       id: 7,
