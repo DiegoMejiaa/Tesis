@@ -62,13 +62,17 @@ void main() {
     expect(await BaseDatos.instancia.contar(), 1);
   });
 
-  test('orden: la más reciente primero (id DESC)', () async {
-    await BaseDatos.instancia
-        .insertar(Medicion(terreno: 'A', punto: 'P1', fechaHora: 'x'));
-    await BaseDatos.instancia
-        .insertar(Medicion(terreno: 'A', punto: 'P2', fechaHora: 'y'));
+  test('orden: la más reciente primero (fecha_hora DESC, no por id)', () async {
+    // Se inserta PRIMERO la más reciente (id menor) y luego la más antigua
+    // (id mayor). Así el orden por fecha_hora es OPUESTO al de id: si ordenara
+    // por id/rowid, la primera sería 'P_antigua' y el test fallaría.
+    await BaseDatos.instancia.insertar(Medicion(
+        terreno: 'A', punto: 'P_reciente', fechaHora: '2026-07-10T09:00:00'));
+    await BaseDatos.instancia.insertar(Medicion(
+        terreno: 'A', punto: 'P_antigua', fechaHora: '2026-07-01T09:00:00'));
     final todas = await BaseDatos.instancia.obtenerTodas();
-    expect(todas.first.punto, 'P2'); // última insertada → id mayor → primera
+    expect(todas.first.punto, 'P_reciente'); // fecha mayor → primera
+    expect(todas.last.punto, 'P_antigua'); // fecha menor → última
   });
 
   test('exportarCsv: encabezado, escape de comillas y comas', () async {

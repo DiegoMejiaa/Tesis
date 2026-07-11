@@ -68,9 +68,12 @@ class BaseDatos {
   }
 
   // Devuelve todas las mediciones, de la más reciente a la más antigua.
+  // Ordena por fecha_hora (las cadenas ISO 8601 ordenan cronológicamente), no
+  // por id/rowid: así el historial refleja la fecha real de la medición aunque
+  // se hayan importado o insertado en otro orden.
   Future<List<Medicion>> obtenerTodas() async {
     final db = await _baseDatos;
-    final filas = await db.query('mediciones', orderBy: 'id DESC');
+    final filas = await db.query('mediciones', orderBy: 'fecha_hora DESC');
     return filas.map(Medicion.fromMap).toList();
   }
 
