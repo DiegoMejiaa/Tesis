@@ -52,6 +52,10 @@ dependencies:
   # Directorio persistente de la app donde se copia cada foto tomada, para que
   # no dependa del caché temporal que devuelve image_picker.
   path_provider: ^2.1.4
+  # Respaldo de fotos en la GALERÍA pública (álbum "monitoreo_suelo"). Así las
+  # fotos sobreviven a una reinstalación (que borra el almacenamiento privado) y
+  # quedan incluidas en el backup de la nube (Google Fotos / Samsung Cloud).
+  gal: ^2.3.0
 
 dev_dependencies:
   flutter_test:

@@ -6,9 +6,12 @@
 //  Los colores salen del Theme (tema.dart) para verse bien en claro/oscuro.
 // =====================================================================
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../datos/base_datos.dart';
+import '../logica/selector_foto.dart';
 import '../modelos/medicion.dart';
 import '../tema/tema.dart';
 import 'vista_foto.dart';
@@ -61,6 +64,61 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
     }
   }
 
+  // Respaldo completo con un toque: (a) copia el CSV del historial al
+  // portapapeles y (b) copia TODAS las fotos referenciadas en la base a la
+  // galería pública (álbum "monitoreo_suelo"), para que sobrevivan a una
+  // reinstalación y queden respaldadas en la nube. Cada foto se guarda como
+  // "<terreno>_<punto>_<fecha>.jpg".
+  Future<void> _exportarRespaldo() async {
+    final lista = widget.demo ?? await BaseDatos.instancia.obtenerTodas();
+
+    // (a) CSV del historial al portapapeles.
+    final csv = await BaseDatos.instancia.exportarCsv();
+    await Clipboard.setData(ClipboardData(text: csv));
+
+    // (b) Fotos referenciadas -> galería pública.
+    var conFoto = 0, respaldadas = 0;
+    for (final m in lista) {
+      final ruta = m.foto;
+      if (ruta == null || ruta.isEmpty || !File(ruta).existsSync()) continue;
+      conFoto++;
+      if (await guardarFotoEnGaleria(ruta, nombre: _nombrePublico(m))) {
+        respaldadas++;
+      }
+    }
+
+    if (!mounted) return;
+    final String msg;
+    if (conFoto == 0) {
+      msg = 'CSV copiado al portapapeles. No hay fotos que respaldar.';
+    } else if (respaldadas == conFoto) {
+      msg = 'Respaldo listo: CSV copiado y $respaldadas '
+          '${respaldadas == 1 ? "foto guardada" : "fotos guardadas"} '
+          'en Galería › $albumGaleria.';
+    } else {
+      msg = 'CSV copiado. Se respaldaron $respaldadas de $conFoto fotos en '
+          'Galería › $albumGaleria (revisá el permiso de galería).';
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // Nombre público "<terreno>_<punto>_<fecha>" saneado (sin espacios ni
+  // caracteres que rompan un nombre de archivo).
+  String _nombrePublico(Medicion m) {
+    String limpio(String s) {
+      final r = s.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+      return r.isEmpty ? 'x' : r;
+    }
+
+    String dos(int n) => n.toString().padLeft(2, '0');
+    final d = DateTime.tryParse(m.fechaHora);
+    final fecha = d == null
+        ? limpio(m.fechaHora)
+        : '${d.year}${dos(d.month)}${dos(d.day)}_'
+            '${dos(d.hour)}${dos(d.minute)}${dos(d.second)}';
+    return '${limpio(m.terreno)}_${limpio(m.punto)}_$fecha';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -71,6 +129,11 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
             tooltip: 'Exportar CSV',
             icon: const Icon(Icons.file_download_outlined),
             onPressed: _exportar,
+          ),
+          IconButton(
+            tooltip: 'Exportar respaldo (CSV + fotos a la galería)',
+            icon: const Icon(Icons.backup_outlined),
+            onPressed: _exportarRespaldo,
           ),
         ],
       ),

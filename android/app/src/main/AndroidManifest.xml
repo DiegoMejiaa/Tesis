@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Respaldo de fotos en la galeria publica. En Android 9 y anteriores hay
+         que ESCRIBIR en el almacenamiento; desde Android 10 (API 29) rige el
+         scoped storage y ya no se necesita este permiso. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application

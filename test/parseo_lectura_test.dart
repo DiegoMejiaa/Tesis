@@ -35,6 +35,7 @@ void main() {
       expect(lectura.humedad, 68.3);
       expect(lectura.temperatura, 24.6);
       expect(lectura.ph, 6.7);
+      expect(lectura.ph, isNot(lectura.humedad));
       expect(lectura.ce, 1459);
       expect(lectura.nLecturas, 5);
     });

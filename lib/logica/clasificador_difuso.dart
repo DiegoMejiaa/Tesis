@@ -28,18 +28,39 @@
 // --- Funciones de pertenencia de ENTRADA (puntos a,b,c,d del trapecio;
 //     triangular = b==c). ---
 //
-//  UMBRALES PRELIMINARES, pendientes de confirmación por criterio
-//  experto. La CE se alinea a las clases de salinidad de USDA-NRCS
-//  (no salino <2000, ligeramente salino 2000–4000, salino >4000 µS/cm);
-//  los rangos de pH se alinearán a EN 206 cuando se incorporen a futuro.
+//  UMBRALES DE CONDUCTIVIDAD ELÉCTRICA ALINEADOS A LA CORROSIVIDAD DEL
+//  SUELO (aplicación a obras civiles), NO a salinidad agrícola. En
+//  ingeniería de corrosión la variable de referencia es la RESISTIVIDAD
+//  del suelo; la CE es su recíproco:
+//        resistividad(Ω·cm) = 1 000 000 / CE(µS/cm).
+//
+//  Clasificación de corrosividad por resistividad (NACE SP0169; AWWA
+//  C105/A21.5; Romanoff M., NBS Circular 579, 1957) y su equivalente en CE:
+//    >20 000 Ω·cm  (CE <50)      esencialmente no corrosivo
+//    10 000–20 000 (CE 50–100)   levemente corrosivo
+//     5 000–10 000 (CE 100–200)  moderadamente corrosivo
+//     3 000–5 000  (CE 200–333)  corrosivo
+//     1 000–3 000  (CE 333–1000) altamente corrosivo
+//      <1 000      (CE >1000)    extremadamente corrosivo
+//
+//  Mapeo a las 3 clases del sistema:
+//    Baja  (Normal)   = no + levemente corrosivo    -> CE < ~100 µS/cm
+//    Media (Moderado) = moderado + corrosivo         -> CE ~100–333 µS/cm
+//    Alta  (Crítico)  = altamente + extremadamente   -> CE > ~333 µS/cm
+//
+//  LIMITACIÓN (documentada): la conversión CE<->resistividad es teórica y
+//  las clases NACE/AWWA se definen sobre resistividad medida en condición
+//  estandarizada (caja de suelo / saturado, ASTM G57/G187). La lectura in
+//  situ del prototipo varía con la humedad, por lo que la clasificación es
+//  PRELIMINAR (screening de corrosividad), no un dictamen certificado.
 
-// Conductividad eléctrica CE (µS/cm) — clases de salinidad USDA-NRCS.
-const List<double> _ceBaja = [0, 0, 1500, 2500];
-const List<double> _ceMedia = [2000, 3000, 3500, 4500];
-const List<double> _ceAlta = [4000, 6000, 12000, 12000];
+// Conductividad eléctrica CE (µS/cm) — umbrales de corrosividad (NACE/AWWA).
+// Cruces de pertenencia 0.5 en 100 µS/cm (10 000 Ω·cm) y 333 µS/cm (3 000 Ω·cm).
+const List<double> _ceBaja = [0, 0, 80, 120];
+const List<double> _ceMedia = [80, 120, 300, 366];
+const List<double> _ceAlta = [300, 366, 12000, 12000];
 
 // Humedad (%) — la banda "alta" arranca en 80 % para que una humedad
-// común (~70 %) no cuente como alta (el sensor tiende a sobreestimar).
 const List<double> _humBaja = [0, 0, 30, 45];
 const List<double> _humMedia = [35, 55, 70, 85];
 const List<double> _humAlta = [80, 92, 100, 100];
@@ -50,12 +71,11 @@ const List<double> _tempAlta = [35, 40, 50, 50];
 //  participa en las reglas como factor agravante; se omiten por ahora.)
 
 // --- Funciones de pertenencia de SALIDA: índice de condición 0–100.
-//     Valores preliminares, sujetos a validación por panel experto. ---
 const List<double> _salNormal = [0, 0, 25, 45];
 const List<double> _salModerada = [35, 50, 50, 65]; // triangular en 50
 const List<double> _salCritica = [55, 75, 100, 100];
 
-// --- Umbrales (valores preliminares, sujetos a validación) ---
+// --- Umbrales ---
 const double _umbralModerado = 40; // score >= -> moderado
 const double _umbralCritico = 60; // score >= -> crítico
 const double _umbralVariableAlterada = 0.5; // pertenencia al extremo

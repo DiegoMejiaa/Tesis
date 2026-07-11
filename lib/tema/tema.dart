@@ -17,6 +17,7 @@ const semillaVerde = Color(0xFF2E7D32);
 const acentoHumedad = Color(0xFF3B82F6); // azul
 const acentoTemperatura = Color(0xFFF2811D); // naranja
 const acentoCE = Color(0xFF8B5CF6); // morado
+const acentoPH = Color(0xFF14B8A6); // verde azulado
 
 ThemeData temaClaro() => _construir(Brightness.light);
 ThemeData temaOscuro() => _construir(Brightness.dark);
@@ -45,8 +46,7 @@ ThemeData _construir(Brightness brillo) {
     dividerTheme: DividerThemeData(
       color: esquema.outlineVariant.withValues(alpha: 0.5),
     ),
-    snackBarTheme:
-        const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
   );
 }
 

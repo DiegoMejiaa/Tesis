@@ -96,6 +96,10 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
   _ph; // pH crudo: se guarda para reanálisis, no se muestra en tarjetas.
   int? _nLecturas; // "promedio de muestras" del firmware (no es un contador).
   String _ultimoCrudo = '';
+  static const Duration _tiempoMaxSinLectura = Duration(seconds: 8);
+  Timer? _temporizadorLectura;
+  DateTime? _ultimaLecturaValida;
+  DateTime? _inicioEsperaLectura;
 
   // Contador REAL de mediciones guardadas en el punto/terreno actual. Es
   // distinto de _nLecturas: sube +1 por cada medición guardada y se reinicia
@@ -132,6 +136,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
     _humedad = (d['humedad'] as num?)?.toDouble();
     _temperatura = (d['temperatura'] as num?)?.toDouble();
     _ce = (d['ce'] as num?)?.toDouble();
+    _ph = (d['ph'] as num?)?.toDouble();
     _nLecturas = (d['n_lecturas'] as num?)?.toInt();
     _guardadasEnPunto = (d['guardadas'] as num?)?.toInt() ?? 0;
     _ultimoCrudo = (d['crudo'] as String?) ?? '';
@@ -203,9 +208,9 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
         _conectado = true;
         _conectando = false;
         _hayError = false;
-        _estado =
-            'Conectado a ${_seleccionado!.name ?? _seleccionado!.address}';
+        _estado = 'Esperando lectura del sensor...';
       });
+      _iniciarVigilanciaLectura();
       // Escucha continua; maneja tanto el cierre normal como un error de flujo
       // (cable/rango) sin crashear y dejando la UI lista para reconectar.
       c.input!
@@ -233,6 +238,8 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
   // Deja la UI en estado desconectado (sin crashear) tras un cierre o error.
   void _marcarDesconectado(String mensaje) {
     if (!mounted) return;
+    _temporizadorLectura?.cancel();
+    _inicioEsperaLectura = null;
     setState(() {
       _conectado = false;
       _conectando = false;
@@ -242,6 +249,42 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
   }
 
   // Acumula bytes y procesa línea por línea (cada \n)
+  void _iniciarVigilanciaLectura() {
+    _temporizadorLectura?.cancel();
+    _ultimaLecturaValida = null;
+    _inicioEsperaLectura = DateTime.now();
+    _temporizadorLectura = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _revisarLecturaReciente(),
+    );
+  }
+
+  void _registrarLecturaValida() {
+    final ahora = DateTime.now();
+    _ultimaLecturaValida = ahora;
+    _inicioEsperaLectura = ahora;
+  }
+
+  void _revisarLecturaReciente() {
+    if (!mounted || !_conectado) return;
+    final referencia = _ultimaLecturaValida ?? _inicioEsperaLectura;
+    if (referencia == null) return;
+
+    final segundos = DateTime.now().difference(referencia).inSeconds;
+    if (segundos < _tiempoMaxSinLectura.inSeconds) return;
+
+    final mensaje = _ultimaLecturaValida == null
+        ? 'Sensor sin respuesta. Revisar 12V, GND común o cableado RS485.'
+        : 'Sensor sin respuesta. Última lectura hace $segundos s. '
+              'Revisar 12V, GND común o cableado RS485.';
+    if (_hayError && _estado == mensaje) return;
+
+    setState(() {
+      _estado = mensaje;
+      _hayError = true;
+    });
+  }
+
   void _onDatos(Uint8List datos) {
     _buffer += utf8.decode(datos, allowMalformed: true);
     int idx;
@@ -260,21 +303,25 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
     if (lectura == null) return; // texto suelto / JSON incompleto: se ignora
     if (lectura.esError) {
       setState(() {
-        _estado = 'Sensor sin respuesta (revisar 12V / cableado)';
+        _estado =
+            'Sensor sin respuesta. Revisar 12V, GND común o cableado RS485.';
         _hayError = true;
       });
       return;
     }
+    if (!lectura.tieneDatos) return;
+    _registrarLecturaValida();
     setState(() {
       _hayError = false;
+      _estado = 'Sensor conectado. Lectura recibida.';
       _punto = lectura.punto ?? _punto;
-      _humedad = lectura.humedad;
-      _temperatura = lectura.temperatura;
-      _ce = lectura.ce;
+      if (lectura.humedad != null) _humedad = lectura.humedad;
+      if (lectura.temperatura != null) _temperatura = lectura.temperatura;
+      if (lectura.ce != null) _ce = lectura.ce;
       // pH crudo: se captura y se guarda, pero NO se muestra en las tarjetas
       // principales ni entra en la clasificación difusa (Módulo 3).
-      _ph = lectura.ph;
-      _nLecturas = lectura.nLecturas;
+      if (lectura.ph != null) _ph = lectura.ph;
+      if (lectura.nLecturas != null) _nLecturas = lectura.nLecturas;
     });
   }
 
@@ -285,6 +332,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
 
   @override
   void dispose() {
+    _temporizadorLectura?.cancel();
     _conexion?.dispose();
     super.dispose();
   }
@@ -574,6 +622,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
               acentoCE,
               decimales: 0,
             ),
+            _tarjetaMetrica('pH', _ph, '', Icons.science_outlined, acentoPH),
             const SizedBox(height: 16),
             _bannerCondicion(),
             const SizedBox(height: 16),
@@ -885,10 +934,11 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
                     color: context.textoFuerte,
                   ),
                 ),
-                TextSpan(
-                  text: '  $unidad',
-                  style: TextStyle(fontSize: 13, color: context.textoTenue),
-                ),
+                if (unidad.isNotEmpty)
+                  TextSpan(
+                    text: '  $unidad',
+                    style: TextStyle(fontSize: 13, color: context.textoTenue),
+                  ),
               ],
             ),
           ),

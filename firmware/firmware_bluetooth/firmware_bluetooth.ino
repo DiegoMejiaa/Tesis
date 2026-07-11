@@ -19,16 +19,16 @@
 #define BAUDIOS_SENSOR 9600
 #define REG_INICIO     0x0006
 #define CANT_REG       7          // 0x0006 .. 0x000C
+#define REG_TEMP       0x0013
 
 // ---------- MAPA DE REGISTROS (índice = registro - 0x0006) ----------
-// !!! VERIFICA con la prueba seco/húmedo y ajusta si hace falta. Estimación
-// según los valores en aire (temp /100 ≈ 23.95 °C es la más segura).
+// !!! VERIFICA con la prueba seco/húmedo y ajusta si hace falta.
+// La temperatura se lee aparte en 0x0013 y se escala con /10.
 #define IDX_HUMEDAD      0        // 0x0006  (mete la sonda en agua: la que SUBE fuerte)
-#define IDX_TEMPERATURA  1        // 0x0007  (~23.95 con /100)
 #define IDX_CE           2        // 0x0008  (conductividad, µS/cm)
 #define IDX_PH           3        // 0x0009
 #define ESC_HUMEDAD      10.0     // crudo/10  -> %
-#define ESC_TEMPERATURA  100.0    // crudo/100 -> °C
+#define ESC_TEMPERATURA  10.0     // crudo/10 -> °C
 #define ESC_CE           1.0      // crudo     -> µS/cm
 #define ESC_PH           100.0    // crudo/100 -> pH
 
@@ -63,10 +63,21 @@ void loop() {
   uint8_t r = nodo.readHoldingRegisters(REG_INICIO, CANT_REG);
 
   if (r == nodo.ku8MBSuccess) {
-    float humedad     = nodo.getResponseBuffer(IDX_HUMEDAD)     / ESC_HUMEDAD;
-    float temperatura = nodo.getResponseBuffer(IDX_TEMPERATURA) / ESC_TEMPERATURA;
-    float ce          = nodo.getResponseBuffer(IDX_CE)          / ESC_CE;
-    float ph          = nodo.getResponseBuffer(IDX_PH)          / ESC_PH;
+    uint16_t rawHumedad = nodo.getResponseBuffer(IDX_HUMEDAD);
+    uint16_t rawCe      = nodo.getResponseBuffer(IDX_CE);
+    uint16_t rawPh      = nodo.getResponseBuffer(IDX_PH);
+
+    uint8_t rt = nodo.readHoldingRegisters(REG_TEMP, 1);
+    if (rt != nodo.ku8MBSuccess) {
+      enviar("{\"estado\":\"error\",\"mensaje\":\"sin respuesta del sensor\"}");
+      delay(PERIODO_MS);
+      return;
+    }
+
+    float humedad     = rawHumedad / ESC_HUMEDAD;
+    float temperatura = nodo.getResponseBuffer(0) / ESC_TEMPERATURA;
+    float ce          = rawCe / ESC_CE;
+    float ph          = rawPh / ESC_PH;
 
     String j = "{";
     j += "\"punto\":\"" PUNTO "\",";

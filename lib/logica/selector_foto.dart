@@ -9,12 +9,55 @@
 //  temporal que devuelve image_picker) para no perder la foto.
 // =====================================================================
 
+import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'package:gal/gal.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+/// Álbum público (galería) donde se respaldan las fotos. El respaldo público
+/// sobrevive a una reinstalación de la app (que borra el almacenamiento privado
+/// interno) y queda incluido en el backup de la nube (Google Fotos / Samsung
+/// Cloud). La copia privada se mantiene igual para el uso normal de la app.
+const String albumGaleria = 'monitoreo_suelo';
+
+/// Copia la imagen de [ruta] a la GALERÍA pública, álbum [albumGaleria].
+///
+/// Es *best-effort*: pide el permiso en tiempo de ejecución y, si no hay acceso
+/// o algo falla, devuelve `false` SIN lanzar (el llamador conserva su copia
+/// privada y no se rompe el flujo). Si se pasa [nombre] (sin extensión), la
+/// imagen pública se guarda con ese nombre; si no, conserva el de [ruta].
+Future<bool> guardarFotoEnGaleria(String ruta, {String? nombre}) async {
+  try {
+    // Permiso en tiempo de ejecución (READ_MEDIA_IMAGES en 33+, o
+    // WRITE_EXTERNAL_STORAGE en versiones viejas). gal elige el correcto.
+    if (!await Gal.requestAccess(toAlbum: true)) {
+      developer.log(
+        'Sin permiso de galería: la foto queda solo en el almacenamiento privado',
+        name: 'selector_foto',
+      );
+      return false;
+    }
+    if (nombre != null && nombre.isNotEmpty) {
+      final bytes = await File(ruta).readAsBytes();
+      await Gal.putImageBytes(bytes, album: albumGaleria, name: nombre);
+    } else {
+      await Gal.putImage(ruta, album: albumGaleria);
+    }
+    return true;
+  } catch (e, s) {
+    developer.log(
+      'No se pudo respaldar la foto en la galería (se conserva la copia privada)',
+      name: 'selector_foto',
+      error: e,
+      stackTrace: s,
+    );
+    return false;
+  }
+}
 
 /// De dónde sacar la foto de un punto.
 enum OrigenFoto { camara, galeria }
@@ -51,7 +94,13 @@ class SelectorFotoImagePicker implements SelectorFoto {
     );
     if (elegida == null) return null; // el usuario canceló
     final destino = await _directorioFotos();
-    return persistirFoto(elegida.path, destino);
+    // 1) Copia PRIVADA persistente (comportamiento original, intacto): es la
+    //    ruta que se guarda en la base y se muestra en la app.
+    final rutaPrivada = await persistirFoto(elegida.path, destino);
+    // 2) Respaldo PÚBLICO en la galería (best-effort): si no hay permiso o
+    //    falla, no interrumpe nada; la copia privada queda igual.
+    await guardarFotoEnGaleria(rutaPrivada);
+    return rutaPrivada;
   }
 
   Future<Directory> _directorioFotos() async {

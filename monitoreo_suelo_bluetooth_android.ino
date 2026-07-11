@@ -3,11 +3,14 @@
   ESP32 + sensor 7en1 (Modbus RTU / RS485). Toma 5 muestras, promedia y envia
   UNA linea JSON por Bluetooth CLASICO (SPP) a la app Flutter ("ESP32_Suelo").
 
-  MAPA DE REGISTROS confirmado con el codigo del companiero (que ya funciona):
-    - Humedad      = 0x0012  / 10   (seco ~10%, mojado ~55%)
-    - Temperatura  = 0x0013  / 10
-    - CE (µS/cm)   = 0x0015  crudo  (topa en 10000; en salado maxeaba => CRITICO)
-    - pH           = 0x0006  / 100  (~6.10)
+  MAPA DE REGISTROS:
+    - Humedad      = 0x0012  / 10    VALIDADO (seco ~10%, mojado ~73%)
+    - CE (µS/cm)   = 0x0015  crudo   VALIDADO (0 en seco, topa 10000 en salado => CRITICO)
+    - pH           = 0x0006  / 100   (~6.10)
+    - Temperatura  = 0x0007  / 100   REFERENCIAL (~26°C). El companiero NO uso ni
+                     valido la temperatura, asi que su 0x0013 no era confiable.
+                     0x0007/100 da valores mas razonables; falta calibrar bien
+                     con un termometro. No es critico: el clasificador casi no la usa.
     - NPK          = 0x001E/0x001F/0x0020 (no se usan en la app por ahora)
 
   NOTA: los registros estan dispersos, por eso se lee cada grupo por separado
@@ -30,13 +33,14 @@
 #define MODBUS_ID      1
 #define BAUDIOS_SENSOR 9600
 
-// ---------- Registros (mapa confirmado) ----------
-#define REG_HUM_TEMP   0x0012    // qty 2: idx0=humedad, idx1=temperatura
-#define REG_CE         0x0015    // qty 1: CE crudo (µS/cm)
+// ---------- Registros ----------
+#define REG_HUMEDAD    0x0012    // qty 1: humedad (/10)   VALIDADO
+#define REG_TEMP       0x0007    // qty 1: temperatura (/100)  REFERENCIAL
+#define REG_CE         0x0015    // qty 1: CE crudo (µS/cm)    VALIDADO
 #define REG_PH         0x0006    // qty 1: pH (/100)
 
 #define ESC_HUMEDAD      10.0    // crudo/10  -> %
-#define ESC_TEMPERATURA  10.0    // crudo/10  -> °C   (OJO: /10, no /100)
+#define ESC_TEMPERATURA  100.0   // crudo/100 -> °C
 #define ESC_CE           1.0     // crudo     -> µS/cm
 #define ESC_PH           100.0   // crudo/100 -> pH
 
@@ -70,13 +74,16 @@ void setup() {
   Serial.println("\n== Firmware BT (mapa confirmado) listo. Empareja \"" NOMBRE_BT "\" y conecta. ==");
 }
 
-// Lee los 3 grupos de registros una vez. Devuelve true si TODO salio bien.
+// Lee los 4 registros una vez. Devuelve true si TODO salio bien.
 bool leerUnaVez(uint16_t &hum, uint16_t &temp, uint16_t &ce, uint16_t &ph) {
   bool ok = true;
 
-  if (nodo.readHoldingRegisters(REG_HUM_TEMP, 2) == nodo.ku8MBSuccess) {
-    hum  = nodo.getResponseBuffer(0);   // 0x0012
-    temp = nodo.getResponseBuffer(1);   // 0x0013
+  if (nodo.readHoldingRegisters(REG_HUMEDAD, 1) == nodo.ku8MBSuccess) {
+    hum = nodo.getResponseBuffer(0);    // 0x0012
+  } else ok = false;
+
+  if (nodo.readHoldingRegisters(REG_TEMP, 1) == nodo.ku8MBSuccess) {
+    temp = nodo.getResponseBuffer(0);   // 0x0007
   } else ok = false;
 
   if (nodo.readHoldingRegisters(REG_CE, 1) == nodo.ku8MBSuccess) {

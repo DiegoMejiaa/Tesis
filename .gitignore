@@ -52,3 +52,6 @@ app.*.map.json
 # Artefactos de Gradle (Android)
 /android/build/
 /android/.gradle/
+# Cache de Gradle del plugin Bluetooth vendorizado en packages/ (no es codigo).
+packages/**/android/.gradle/
+packages/**/android/build/

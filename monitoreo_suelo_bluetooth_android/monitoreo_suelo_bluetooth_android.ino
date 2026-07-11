@@ -3,7 +3,7 @@
   ESP32 + sensor 7en1 (Modbus RTU / RS485). Toma 5 muestras, promedia y envia
   UNA linea JSON por Bluetooth CLASICO (SPP) a la app Flutter ("ESP32_Suelo").
 
-  MAPA DE REGISTROS confirmado con el codigo del companiero (que ya funciona):
+  MAPA DE REGISTROS:
     - Humedad      = 0x0012  / 10   (seco ~10%, mojado ~55%)
     - Temperatura  = 0x0013  / 10
     - CE (µS/cm)   = 0x0015  crudo  (topa en 10000; en salado maxeaba => CRITICO)
@@ -13,8 +13,7 @@
   NOTA: los registros estan dispersos, por eso se lee cada grupo por separado
   (una lectura contigua grande falla porque hay direcciones inexistentes en medio).
 
-  Se mantiene Bluetooth CLASICO (SPP) + JSON para no romper la app. El codigo del
-  companiero usa BLE; NO se copia su transporte, solo su mapa de registros.
+ 
 */
 #include <ModbusMaster.h>
 #include "BluetoothSerial.h"
