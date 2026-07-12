@@ -92,7 +92,7 @@ void main() {
     final lineas = csv.trim().split('\n');
 
     expect(lineas.first,
-        'id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,observaciones,condicion,foto');
+        'id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,observaciones,condicion,foto,latitud,longitud');
     expect(lineas.length, 2);
     expect(csv, contains('"Terreno ""Norte"""')); // comillas duplicadas
     expect(csv, contains('"con, coma"')); // coma dentro de campo entrecomillado
@@ -131,6 +131,41 @@ void main() {
     final n2 = await BaseDatos.instancia.importarCsv(csv);
     expect(n2, 0);
     expect((await BaseDatos.instancia.obtenerTodas()).length, 2);
+  });
+
+  test('CSV: latitud/longitud ida y vuelta y compatibilidad con CSV viejo',
+      () async {
+    // Inserta con coordenadas, exporta y reimporta: las coordenadas sobreviven.
+    await BaseDatos.instancia.insertar(Medicion(
+      terreno: 'Terreno A',
+      punto: 'P1',
+      fechaHora: '2026-06-29T10:00:00',
+      humedad: 56,
+      ce: 40,
+      latitud: 14.0870,
+      longitud: -87.1650,
+    ));
+    final csv = await BaseDatos.instancia.exportarCsv();
+    expect(csv, contains('14.087'));
+    expect(csv, contains('-87.165'));
+
+    await _limpiar();
+    await BaseDatos.instancia.importarCsv(csv);
+    final reimportada = (await BaseDatos.instancia.obtenerTodas()).single;
+    expect(reimportada.latitud, closeTo(14.0870, 1e-9));
+    expect(reimportada.longitud, closeTo(-87.1650, 1e-9));
+
+    // Un CSV viejo (12 columnas, sin latitud/longitud) sigue importando; las
+    // coordenadas quedan null y no rompe.
+    await _limpiar();
+    const csvViejo =
+        'id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,observaciones,condicion,foto\n'
+        '1,Terreno B,P9,2026-05-01T08:00:00,50,22,40,,5,sin coords,,\n';
+    final n = await BaseDatos.instancia.importarCsv(csvViejo);
+    expect(n, 1);
+    final vieja = (await BaseDatos.instancia.obtenerTodas()).single;
+    expect(vieja.latitud, isNull);
+    expect(vieja.longitud, isNull);
   });
 
   test('Medicion.toMap/fromMap es ida y vuelta', () {

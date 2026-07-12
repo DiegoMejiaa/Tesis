@@ -4,7 +4,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <!-- Ubicacion: GPS por punto (geolocator) para el mapa de mediciones.
+         FINE para precision alta; COARSE como respaldo. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- Foto por punto: camara y lectura de imagenes (galeria).
          READ_MEDIA_IMAGES en Android 13+; READ_EXTERNAL_STORAGE hasta API 32. -->

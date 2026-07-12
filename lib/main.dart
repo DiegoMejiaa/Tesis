@@ -15,9 +15,11 @@ import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'datos/base_datos.dart';
 import 'logica/clasificador_difuso.dart';
+import 'logica/corrosividad.dart';
 import 'logica/contador_guardadas.dart';
 import 'logica/parseo_lectura.dart';
 import 'logica/selector_foto.dart';
+import 'logica/ubicacion.dart';
 import 'modelos/medicion.dart';
 import 'pantallas/historial.dart';
 import 'pantallas/vista_foto.dart';
@@ -41,7 +43,7 @@ class MonitoreoApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: controladorTema,
       builder: (context, _) => MaterialApp(
-        title: 'Monitoreo de Suelo',
+        title: 'Corrosividad de Suelos · Obras Civiles',
         debugShowCheckedModeBanner: false,
         theme: temaClaro(),
         darkTheme: temaOscuro(),
@@ -58,6 +60,7 @@ class PantallaLecturas extends StatefulWidget {
     this.datosDemo,
     this.controladorTema,
     this.selectorFoto,
+    this.servicioUbicacion,
   });
 
   /// Solo para previsualización/capturas (golden tests). Si no es null, la
@@ -71,6 +74,10 @@ class PantallaLecturas extends StatefulWidget {
   /// Acceso a la cámara/galería. Inyectable para poder mockearlo en tests; en
   /// producción es null y se usa la implementación real (image_picker).
   final SelectorFoto? selectorFoto;
+
+  /// Servicio de ubicación (GPS). Inyectable para tests; en producción es null
+  /// y se usa la implementación real (geolocator).
+  final ServicioUbicacion? servicioUbicacion;
 
   @override
   State<PantallaLecturas> createState() => _PantallaLecturasState();
@@ -95,6 +102,8 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
   double?
   _ph; // pH crudo: se guarda para reanálisis, no se muestra en tarjetas.
   int? _nLecturas; // "promedio de muestras" del firmware (no es un contador).
+  double? _voltaje; // voltaje de alimentación del sensor (V); null = el firmware
+  // no lo envía (entonces no se muestra nada, no se asume un valor).
   String _ultimoCrudo = '';
   static const Duration _tiempoMaxSinLectura = Duration(seconds: 8);
   Timer? _temporizadorLectura;
@@ -110,6 +119,10 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
   // Acceso a cámara/galería (real por defecto, mockeable en tests).
   late final SelectorFoto _selectorFoto =
       widget.selectorFoto ?? SelectorFotoImagePicker();
+
+  // Servicio de ubicación (real por defecto, mockeable en tests).
+  late final ServicioUbicacion _ubicacion =
+      widget.servicioUbicacion ?? const ServicioUbicacionGeolocator();
 
   @override
   void initState() {
@@ -138,6 +151,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
     _ce = (d['ce'] as num?)?.toDouble();
     _ph = (d['ph'] as num?)?.toDouble();
     _nLecturas = (d['n_lecturas'] as num?)?.toInt();
+    _voltaje = (d['voltaje'] as num?)?.toDouble();
     _guardadasEnPunto = (d['guardadas'] as num?)?.toInt() ?? 0;
     _ultimoCrudo = (d['crudo'] as String?) ?? '';
   }
@@ -322,6 +336,8 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       // principales ni entra en la clasificación difusa (Módulo 3).
       if (lectura.ph != null) _ph = lectura.ph;
       if (lectura.nLecturas != null) _nLecturas = lectura.nLecturas;
+      // Voltaje: solo si el firmware lo envía; si no, queda como estaba (null).
+      if (lectura.voltaje != null) _voltaje = lectura.voltaje;
     });
   }
 
@@ -446,6 +462,10 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
           ).categoria
         : null;
 
+    // GPS del punto (Módulo 1 / mapa). Si el permiso se niega, el GPS está
+    // apagado o hay timeout, devuelve null y la medición se guarda igual.
+    final coord = await _ubicacion.obtener();
+
     final m = Medicion(
       terreno: terreno,
       punto: punto,
@@ -458,6 +478,8 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       observaciones: obsCtrl.text.trim(),
       condicion: categoria,
       foto: fotoRuta,
+      latitud: coord?.latitud,
+      longitud: coord?.longitud,
     );
     try {
       await BaseDatos.instancia.insertar(m);
@@ -623,6 +645,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
               decimales: 0,
             ),
             _tarjetaMetrica('pH', _ph, '', Icons.science_outlined, acentoPH),
+            _bannerVoltaje(),
             const SizedBox(height: 16),
             _bannerCondicion(),
             const SizedBox(height: 16),
@@ -646,7 +669,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
             color: context.esquema.primary.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(Icons.eco, color: context.esquema.primary),
+          child: Icon(Icons.foundation, color: context.esquema.primary),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -654,12 +677,14 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Monitoreo de Suelo',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                'Corrosividad de Suelos',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                softWrap: true,
               ),
+              const SizedBox(height: 2),
               Text(
-                'Lectura en vivo · ESP32',
-                style: TextStyle(fontSize: 13, color: context.textoTenue),
+                'Evaluación para obras civiles · ESP32',
+                style: TextStyle(fontSize: 12, color: context.textoTenue),
               ),
             ],
           ),
@@ -947,6 +972,78 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
     );
   }
 
+  // --- Estado de alimentación (voltaje del sensor) ---
+  // Se muestra SOLO si el firmware envía "voltaje". Si es < 11 V se marca en
+  // rojo con una advertencia. Si el campo no llega, no se muestra nada (no se
+  // asume ni inventa un valor).
+  Widget _bannerVoltaje() {
+    final v = _voltaje;
+    if (v == null) return const SizedBox.shrink();
+    final bajo = v < 11.0;
+    final color = bajo ? const Color(0xFFE53935) : context.esquema.primary;
+    return _tarjeta(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              bajo ? Icons.battery_alert_rounded : Icons.battery_full_rounded,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Alimentación del sensor',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: context.textoFuerte,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (bajo) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Voltaje bajo (< 11 V): revisá la batería o la fuente.',
+                    style: TextStyle(fontSize: 12, color: color),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: v.toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                TextSpan(
+                  text: '  V',
+                  style: TextStyle(fontSize: 13, color: context.textoTenue),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- Última línea cruda recibida (depuración) ---
   Widget _lineaCruda() {
     return Row(
@@ -1001,7 +1098,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
         : c.categoria == 'moderado'
         ? Icons.info_outline
         : Icons.check_circle_outline;
-    final etiqueta = c.categoria[0].toUpperCase() + c.categoria.substring(1);
+    final clase = nombreCorrosividad(c.categoria);
 
     return Container(
       width: double.infinity,
@@ -1020,7 +1117,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Condición preliminar: $etiqueta',
+                  clase,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: color,
@@ -1048,6 +1145,25 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          // Resistividad equivalente del suelo (variable de referencia en
+          // ingeniería de corrosión). Presentación: no altera el cálculo.
+          Row(
+            children: [
+              Icon(Icons.speed_outlined, color: context.textoTenue, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Resistividad equivalente ≈ ${resistividadTexto(_ce)}',
+                  style: TextStyle(
+                    color: context.textoFuerte,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (critico) ...[
             const SizedBox(height: 10),
             Text(
@@ -1069,7 +1185,7 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
           ],
           const SizedBox(height: 6),
           Text(
-            'Clasificación preliminar; no certifica el terreno.',
+            'Clasificación preliminar de corrosividad; no certifica el terreno.',
             style: TextStyle(
               color: context.textoTenue,
               fontSize: 11,

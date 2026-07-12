@@ -17,6 +17,7 @@ class LecturaEnVivo {
   final double? ce;
   final double? ph; // pH crudo (no se muestra ni clasifica; se guarda igual)
   final int? nLecturas;
+  final double? voltaje; // voltaje de alimentación del sensor (V), si lo reporta
   final bool esError; // la ESP32 reportó {"estado":"error"}
 
   const LecturaEnVivo({
@@ -26,6 +27,7 @@ class LecturaEnVivo {
     this.ce,
     this.ph,
     this.nLecturas,
+    this.voltaje,
     this.esError = false,
   });
 
@@ -60,6 +62,8 @@ LecturaEnVivo? parsearLectura(String linea) {
     ce: _aDouble(m['ce']),
     ph: _aDouble(m['ph']),
     nLecturas: _aInt(m['n_lecturas']),
+    // Aditivo: si el firmware aún no envía "voltaje", queda null y no se muestra.
+    voltaje: _aDouble(m['voltaje']),
   );
 }
 

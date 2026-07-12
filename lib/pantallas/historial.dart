@@ -12,10 +12,15 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
 import '../datos/base_datos.dart';
+import '../logica/clasificador_difuso.dart';
+import '../logica/corrosividad.dart';
+import '../logica/reporte_pdf.dart';
 import '../logica/selector_foto.dart';
 import '../modelos/medicion.dart';
 import '../tema/tema.dart';
+import 'mapa.dart';
 import 'vista_foto.dart';
 
 class PantallaHistorial extends StatefulWidget {
@@ -151,6 +156,26 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
     _aviso('$importadas mediciones importadas');
   }
 
+  // Genera un PDF con la tabla de puntos (por grupo campo/controles/banco) y un
+  // resumen, y abre el diálogo del sistema para compartirlo/guardarlo. Es solo
+  // presentación: usa el clasificador actual en modo lectura.
+  Future<void> _exportarReporte() async {
+    final lista = widget.demo ?? await BaseDatos.instancia.obtenerTodas();
+    if (lista.isEmpty) {
+      _aviso('No hay mediciones para incluir en el reporte.');
+      return;
+    }
+    try {
+      final bytes = await construirReportePdf(lista);
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'reporte_corrosividad.pdf',
+      );
+    } catch (e) {
+      _aviso('No se pudo generar el reporte: $e');
+    }
+  }
+
   void _aviso(String mensaje) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -181,19 +206,65 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
         title: const Text('Historial de mediciones'),
         actions: [
           IconButton(
-            tooltip: 'Importar CSV',
-            icon: const Icon(Icons.file_upload_outlined),
-            onPressed: _importarCsv,
+            tooltip: 'Mapa de puntos',
+            icon: const Icon(Icons.map_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PantallaMapa(demo: widget.demo),
+              ),
+            ),
           ),
-          IconButton(
-            tooltip: 'Exportar CSV',
-            icon: const Icon(Icons.file_download_outlined),
-            onPressed: _exportar,
-          ),
-          IconButton(
-            tooltip: 'Exportar respaldo (CSV + fotos a la galería)',
-            icon: const Icon(Icons.backup_outlined),
-            onPressed: _exportarRespaldo,
+          // Acciones de datos agrupadas en un menú para no saturar la barra
+          // (importar/exportar CSV, reporte PDF y respaldo).
+          PopupMenuButton<String>(
+            tooltip: 'Datos y exportación',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) {
+              switch (v) {
+                case 'importar':
+                  _importarCsv();
+                case 'csv':
+                  _exportar();
+                case 'reporte':
+                  _exportarReporte();
+                case 'respaldo':
+                  _exportarRespaldo();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'importar',
+                child: ListTile(
+                  leading: Icon(Icons.file_upload_outlined),
+                  title: Text('Importar CSV'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'csv',
+                child: ListTile(
+                  leading: Icon(Icons.file_download_outlined),
+                  title: Text('Exportar CSV'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'reporte',
+                child: ListTile(
+                  leading: Icon(Icons.picture_as_pdf_outlined),
+                  title: Text('Exportar reporte (PDF)'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'respaldo',
+                child: ListTile(
+                  leading: Icon(Icons.backup_outlined),
+                  title: Text('Exportar respaldo (CSV + fotos)'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -262,6 +333,11 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
 
   Widget _tarjetaMedicion(Medicion m) {
     final tieneFoto = m.foto != null && m.foto!.isNotEmpty;
+    // Score recalculado con el clasificador actual (solo presentación; no
+    // altera lo guardado). Requiere humedad y CE para poder inferir.
+    final clas = (m.humedad != null && m.ce != null)
+        ? clasificar(humedad: m.humedad!, ce: m.ce!, temperatura: m.temperatura)
+        : null;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -322,6 +398,9 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
               _dato('Humedad', m.humedad, '%'),
               _dato('Temp', m.temperatura, '°C'),
               _dato('CE', m.ce, 'µS/cm', decimales: 0),
+              _datoTexto('Resistividad', resistividadTexto(m.ce)),
+              if (clas != null)
+                _datoTexto('Score', '${clas.score.round()}/100'),
             ],
           ),
           if (m.observaciones.isNotEmpty) ...[
@@ -345,12 +424,32 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        condicion,
+        nombreCorrosividad(condicion),
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
           color: color,
         ),
+      ),
+    );
+  }
+
+  // Igual que _dato pero con un valor de texto ya formateado (resistividad,
+  // score). Hereda la fuente del tema para verse consistente.
+  Widget _datoTexto(String etiqueta, String valor) {
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(color: context.textoFuerte),
+        children: [
+          TextSpan(
+            text: '$etiqueta: ',
+            style: TextStyle(fontSize: 12, color: context.textoTenue),
+          ),
+          TextSpan(
+            text: valor,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }

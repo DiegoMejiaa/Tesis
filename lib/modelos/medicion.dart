@@ -20,6 +20,8 @@ class Medicion {
   final String observaciones;
   final String? condicion; // normal / moderado / crítico (Módulo 3)
   final String? foto; // ruta local de la foto del punto (opcional)
+  final double? latitud; // GPS del punto (grados decimales); null si no hubo
+  final double? longitud; // permiso/señal al guardar. Registros viejos: null.
 
   Medicion({
     this.id,
@@ -34,7 +36,12 @@ class Medicion {
     this.observaciones = '',
     this.condicion,
     this.foto,
+    this.latitud,
+    this.longitud,
   });
+
+  /// true si tiene coordenadas válidas (se puede dibujar en el mapa).
+  bool get tieneCoordenadas => latitud != null && longitud != null;
 
   // Convierte a Map para guardar en SQLite.
   Map<String, Object?> toMap() => {
@@ -50,6 +57,8 @@ class Medicion {
     'observaciones': observaciones,
     'condicion': condicion,
     'foto': foto,
+    'latitud': latitud,
+    'longitud': longitud,
   };
 
   // Reconstruye desde un Map leído de SQLite.
@@ -66,6 +75,8 @@ class Medicion {
     observaciones: (m['observaciones'] as String?) ?? '',
     condicion: m['condicion'] as String?,
     foto: m['foto'] as String?,
+    latitud: (m['latitud'] as num?)?.toDouble(),
+    longitud: (m['longitud'] as num?)?.toDouble(),
   );
 
   // Fecha/hora legible para mostrar en pantalla.

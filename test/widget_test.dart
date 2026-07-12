@@ -36,7 +36,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Monitoreo de Suelo'), findsOneWidget);
+    expect(find.text('Corrosividad de Suelos'), findsOneWidget);
     expect(find.text('Humedad'), findsOneWidget);
     expect(find.text('Temperatura'), findsOneWidget);
     expect(find.text('Conductividad'), findsOneWidget);

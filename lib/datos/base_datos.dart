@@ -29,7 +29,8 @@ class BaseDatos {
       ruta,
       // v2: columna `ph` (pH crudo del sensor).
       // v3: columna `foto` (ruta local de la foto del punto, opcional).
-      version: 3,
+      // v4: columnas `latitud`/`longitud` (GPS del punto, opcionales).
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE mediciones (
@@ -44,7 +45,9 @@ class BaseDatos {
             n_lecturas INTEGER,
             observaciones TEXT,
             condicion TEXT,
-            foto TEXT
+            foto TEXT,
+            latitud REAL,
+            longitud REAL
           )
         ''');
       },
@@ -56,6 +59,10 @@ class BaseDatos {
         }
         if (desde < 3) {
           await db.execute('ALTER TABLE mediciones ADD COLUMN foto TEXT');
+        }
+        if (desde < 4) {
+          await db.execute('ALTER TABLE mediciones ADD COLUMN latitud REAL');
+          await db.execute('ALTER TABLE mediciones ADD COLUMN longitud REAL');
         }
       },
     );
@@ -92,7 +99,10 @@ class BaseDatos {
 
   // Importa mediciones desde el CONTENIDO de un CSV con la cabecera exacta:
   //   id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,
-  //   observaciones,condicion,foto
+  //   observaciones,condicion,foto,latitud,longitud
+  //
+  //  Compatibilidad: los CSV viejos (sin las columnas latitud/longitud) se
+  //  importan igual; esas coordenadas quedan en null.
   //
   // Reglas (restaurar el historial perdido tras una reinstalación):
   //  - RECLASIFICA la condición con el clasificador difuso ACTUAL a partir de
@@ -146,7 +156,8 @@ class BaseDatos {
       }
 
       // 0 id · 1 terreno · 2 punto · 3 fecha_hora · 4 humedad · 5 temperatura ·
-      // 6 ce · 7 ph · 8 n_lecturas · 9 observaciones · 10 condicion · 11 foto
+      // 6 ce · 7 ph · 8 n_lecturas · 9 observaciones · 10 condicion · 11 foto ·
+      // 12 latitud · 13 longitud
       final fechaHora = col(3);
       // Fila sin marca de tiempo, cabecera colada o duplicado -> se ignora.
       if (fechaHora.isEmpty ||
@@ -183,6 +194,8 @@ class BaseDatos {
           observaciones: col(9),
           condicion: condicion,
           foto: col(11), // vacío -> '' (las fotos se perdieron)
+          latitud: real(12), // vacío/CSV viejo -> null
+          longitud: real(13),
         ).toMap(),
       );
       insertadas++;
@@ -195,7 +208,7 @@ class BaseDatos {
     final lista = await obtenerTodas();
     final buffer = StringBuffer();
     buffer.writeln(
-      'id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,observaciones,condicion,foto',
+      'id,terreno,punto,fecha_hora,humedad,temperatura,ce,ph,n_lecturas,observaciones,condicion,foto,latitud,longitud',
     );
     for (final m in lista) {
       String c(Object? v) {
@@ -217,6 +230,8 @@ class BaseDatos {
           c(m.observaciones),
           c(m.condicion ?? ''),
           c(m.foto ?? ''),
+          m.latitud ?? '',
+          m.longitud ?? '',
         ].join(','),
       );
     }

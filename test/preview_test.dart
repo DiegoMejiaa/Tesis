@@ -12,10 +12,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monitoreo_suelo/main.dart';
 import 'package:monitoreo_suelo/modelos/medicion.dart';
 import 'package:monitoreo_suelo/pantallas/historial.dart';
+import 'package:monitoreo_suelo/pantallas/mapa.dart';
 
 // Carpeta de fuentes que trae el SDK de Flutter (Roboto + Material Icons).
 const _fonts = r'C:/src/flutter/bin/cache/artifacts/material_fonts';
@@ -121,6 +123,32 @@ void main() {
     );
   });
 
+  testWidgets('captura: voltaje bajo (advertencia de alimentación)', (
+    tester,
+  ) async {
+    await _capturar(
+      tester,
+      const PantallaLecturas(
+        datosDemo: {
+          'dispositivo': 'ESP32_Suelo',
+          'conectado': true,
+          'estado': 'Conectado a ESP32_Suelo',
+          'punto': 'P1',
+          'humedad': 56.0,
+          'temperatura': 23.8,
+          'ce': 40,
+          'ph': 6.8,
+          'n_lecturas': 5,
+          'voltaje': 10.4, // < 11 V => se muestra la advertencia en rojo
+          'crudo':
+              '{"punto":"P1","humedad":56.0,"temperatura":23.8,"ph":6.8,"ce":40,"n_lecturas":5,"voltaje":10.4}',
+        },
+      ),
+      'voltaje_bajo.png',
+      alto: 980,
+    );
+  });
+
   testWidgets('captura: desconectado (pantalla inicial)', (tester) async {
     await _capturar(
       tester,
@@ -174,6 +202,55 @@ void main() {
         ],
       ),
       'historial.png',
+    );
+  });
+
+  testWidgets('captura: mapa con puntos georreferenciados', (tester) async {
+    await _capturar(
+      tester,
+      PantallaMapa(
+        // Tiles sin caché: el caché en disco usa path_provider, que no está
+        // disponible en el entorno de prueba.
+        tileProvider: NetworkTileProvider(
+          cachingProvider: const DisabledMapCachingProvider(),
+        ),
+        demo: [
+          Medicion(
+            id: 1,
+            terreno: 'Terreno A',
+            punto: 'P1',
+            fechaHora: '2026-06-29T10:15:00',
+            humedad: 68.3,
+            ce: 40,
+            condicion: 'normal',
+            latitud: 14.0870,
+            longitud: -87.1650,
+          ),
+          Medicion(
+            id: 2,
+            terreno: 'Terreno A',
+            punto: 'P2',
+            fechaHora: '2026-06-29T10:05:00',
+            humedad: 41.2,
+            ce: 250,
+            condicion: 'moderado',
+            latitud: 14.0858,
+            longitud: -87.1622,
+          ),
+          Medicion(
+            id: 3,
+            terreno: 'Terreno B',
+            punto: 'P1',
+            fechaHora: '2026-06-28T16:40:00',
+            humedad: 23.7,
+            ce: 900,
+            condicion: 'crítico',
+            latitud: 14.0845,
+            longitud: -87.1665,
+          ),
+        ],
+      ),
+      'mapa.png',
     );
   });
 }

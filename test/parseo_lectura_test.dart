@@ -46,5 +46,18 @@ void main() {
       expect(lectura, isNotNull);
       expect(lectura!.esError, isTrue);
     });
+
+    test('voltaje: se parsea si viene, y queda null si no viene', () {
+      final con = parsearLectura(
+        '{"punto":"P1","humedad":56,"ce":40,"voltaje":10.4}',
+      );
+      expect(con, isNotNull);
+      expect(con!.voltaje, 10.4);
+
+      // Sin el campo "voltaje": queda null (el firmware puede no enviarlo).
+      final sin = parsearLectura('{"punto":"P1","humedad":56,"ce":40}');
+      expect(sin, isNotNull);
+      expect(sin!.voltaje, isNull);
+    });
   });
 }
