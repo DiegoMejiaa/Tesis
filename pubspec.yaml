@@ -66,6 +66,10 @@ dependencies:
   latlong2: ^0.10.1
   pdf: ^3.12.0
   printing: ^5.14.3
+  # Interpretación de apoyo con LLM (Google Gemini): llamada HTTP a la API de
+  # generativelanguage. Es OPCIONAL y de presentación; si falla la red, la app
+  # funciona igual. La lógica de red se aísla en lib/logica/interpretador_llm.dart.
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

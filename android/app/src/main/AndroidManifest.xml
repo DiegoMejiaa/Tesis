@@ -20,6 +20,10 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Interpretacion de apoyo con LLM (Google Gemini): llamada HTTP a la API.
+         Es opcional; sin internet la app funciona igual (solo sin ese texto). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="monitoreo_suelo"
         android:name="${applicationName}"
