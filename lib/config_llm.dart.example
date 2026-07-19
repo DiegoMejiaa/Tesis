@@ -1,0 +1,38 @@
+// =====================================================================
+//  PLANTILLA de configuración del LLM (Google Gemini)
+// ---------------------------------------------------------------------
+//  Este archivo (.example) SÍ se versiona; NO contiene la API key.
+//
+//  Para activar la interpretación de apoyo en una máquina nueva:
+//    1. Copiá este archivo a  lib/config_llm.dart  (mismo directorio,
+//       quitándole el ".example"). Ese config_llm.dart está en .gitignore,
+//       así que la key NUNCA se sube al repo.
+//    2. Pegá tu API key de https://aistudio.google.com/apikey en
+//       [_apiKeyConstante].
+//
+//  Alternativa sin escribir la key en el archivo:
+//    flutter build apk --release --dart-define=GEMINI_API_KEY=tu_key
+//  (--dart-define tiene prioridad sobre la constante de abajo.)
+// =====================================================================
+
+class ConfigLLM {
+  const ConfigLLM._();
+
+  // >>> PEGÁ TU API KEY DE GEMINI ACÁ (entre las comillas) <<<
+  static const String _apiKeyConstante = '';
+
+  /// API key efectiva: prioriza --dart-define=GEMINI_API_KEY; si no, usa la
+  /// constante de arriba.
+  static const String apiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: _apiKeyConstante,
+  );
+
+  /// Modelo de Gemini a usar. 'gemini-flash-latest' apunta siempre al Flash
+  /// vigente y tiene cuota en el nivel gratuito; 'gemini-2.0-flash' devolvía
+  /// 429 con limit 0. Cambialo acá si querés otro.
+  static const String modelo = 'gemini-flash-latest';
+
+  /// true si hay una API key configurada (por constante o por --dart-define).
+  static bool get hayApiKey => apiKey.trim().isNotEmpty;
+}

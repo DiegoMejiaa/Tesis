@@ -5,7 +5,7 @@
 //  frases en lenguaje natural que interpreten el resultado. Es SOLO apoyo
 //  de redacción: NO decide la clase, NO toca umbrales ni el clasificador
 //  (lib/logica/clasificador_difuso.dart). La decisión la sigue tomando la
-//  lógica difusa; este texto es cribado PRELIMINAR, no un dictamen.
+//  lógica difusa; este texto es una orientación PRELIMINAR, no un dictamen.
 //
 //  Diseñado para fallar en silencio: si no hay API key, no hay internet o
 //  la API responde mal, se lanza [InterpretacionException] y la UI muestra
@@ -104,10 +104,14 @@ class InterpretadorGemini implements InterpretadorLLM {
         },
       ],
       // Tono sobrio y respuesta corta (el prompt pide máximo 60 palabras).
+      // thinkingBudget 0 desactiva el "pensamiento" del modelo: gemini-flash-latest
+      // es un modelo con thinking y, sin esto, los tokens de razonamiento agotan el
+      // presupuesto y la respuesta sale cortada.
       'generationConfig': {
         'temperature': 0.4,
         'topP': 0.9,
-        'maxOutputTokens': 256,
+        'maxOutputTokens': 400,
+        'thinkingConfig': {'thinkingBudget': 0},
       },
     });
 
@@ -157,26 +161,32 @@ String construirPromptInterpretacion(DatosInterpretacion d) {
 
   final buffer = StringBuffer()
     ..write(
-      'Sos un asistente que interpreta una clasificación PRELIMINAR de '
-      'corrosividad del suelo para obra civil. A partir de estos datos: '
-      '${d.clase}, score ${d.score}/100, conductividad ${ent(d.ce)} µS/cm, '
-      'resistividad equivalente $resistTxt Ω·cm, humedad ${num1(d.humedad)} %, '
-      'pH ${num1(d.ph)}, temperatura ${num1(d.temperatura)} °C. ',
+      'Sos un asistente que INFORMA, en lenguaje natural, una clasificación '
+      'PRELIMINAR de corrosividad del suelo para obra civil. La herramienta '
+      'informa y DEFIERE al criterio profesional: no decide, no prescribe. '
+      'Datos: ${d.clase}, score ${d.score}/100, conductividad ${ent(d.ce)} '
+      'µS/cm, resistividad equivalente $resistTxt Ω·cm, humedad '
+      '${num1(d.humedad)} %, pH ${num1(d.ph)}, temperatura '
+      '${num1(d.temperatura)} °C. ',
     );
   if (d.variablesAltas.isNotEmpty) {
-    buffer.write('Variables actualmente elevadas: ${d.variablesAltas.join(', ')}. ');
+    buffer.write('Variables elevadas: ${d.variablesAltas.join(', ')}. ');
   }
   buffer.write(
-    'Redactá 2-3 frases claras: (a) qué indica el nivel de corrosividad, '
-    '(b) que la conductividad es la variable determinante, y (c) el SIGUIENTE '
-    'PASO recomendado: consultar/realizar un estudio geotécnico o de corrosión '
-    'detallado (cloruros, sulfatos, resistividad a profundidad) antes de '
-    'construir. '
-    'PROHIBIDO: certificar el terreno; decir si necesita o no protección; '
-    'recomendar medidas estructurales, catódicas o de protección específicas; '
-    'dar por resuelta o completa la evaluación. Aclará SIEMPRE que es un '
-    'cribado preliminar que NO sustituye un estudio especializado ni el '
-    'criterio profesional. Máximo 60 palabras, tono técnico y sobrio.',
+    'Redactá 2-3 frases que: (a) informen el nivel preliminar de corrosividad, '
+    '(b) indiquen que la conductividad es la variable determinante, y (c) '
+    'cierren con que la valoración final corresponde al criterio profesional. '
+    'Guía según el nivel: para "Baja corrosividad", que no se evidencian '
+    'indicadores de corrosividad relevantes; para "Corrosividad moderada", que '
+    'sugiere una corrosividad intermedia determinada por la conductividad; para '
+    '"Alta corrosividad", que sugiere una corrosividad elevada determinada por '
+    'la conductividad. '
+    'REGLAS ESTRICTAS: PROHIBIDO prescribir estudios o acciones específicas, '
+    'certificar el terreno, decir si necesita o no protección, y usar verbos '
+    'imperativos ("realice", "necesita", "debe"). Solo INFORMÁ el nivel '
+    'preliminar y aclará que la valoración final es del profesional. Indicá '
+    'SIEMPRE que es una orientación preliminar de apoyo. Máximo 55 palabras, '
+    'tono técnico y sobrio.',
   );
   return buffer.toString();
 }
@@ -197,7 +207,9 @@ String? extraerTextoGemini(String body) {
     if (parts is! List) return null;
     final buffer = StringBuffer();
     for (final p in parts) {
-      if (p is Map && p['text'] is String) buffer.write(p['text']);
+      if (p is! Map) continue;
+      if (p['thought'] == true) continue; // ignora partes de "pensamiento"
+      if (p['text'] is String) buffer.write(p['text']);
     }
     final s = buffer.toString().trim();
     return s.isEmpty ? null : s;

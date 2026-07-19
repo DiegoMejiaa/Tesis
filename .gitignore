@@ -44,6 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# SECRETO: la config con la API key de Gemini NO va al repo (contiene la key
+# en texto plano). Se versiona solo la plantilla lib/config_llm.dart.example.
+# Cada máquina crea su lib/config_llm.dart local a partir de la plantilla.
+/lib/config_llm.dart
+
 # Estado local de herramientas (no es código del proyecto)
 .tokensave/
 .agents/

@@ -48,12 +48,13 @@ void main() {
       expect(p, contains('Conductividad (CE) alta')); // variable elevada
     });
 
-    test('impone las restricciones (cribado preliminar, no certificar)', () {
+    test('impone las restricciones (orientación preliminar, no certificar)', () {
       final p = construirPromptInterpretacion(_datos);
       expect(p, contains('PROHIBIDO'));
-      expect(p, contains('NO sustituye'));
-      expect(p, contains('cribado preliminar'));
-      expect(p, contains('Máximo 60 palabras'));
+      expect(p, contains('imperativos')); // no verbos imperativos
+      expect(p, contains('criterio profesional')); // defiere al profesional
+      expect(p, contains('orientación preliminar'));
+      expect(p, contains('Máximo 55 palabras'));
     });
 
     test('tolera valores nulos sin romper', () {
@@ -75,6 +76,22 @@ void main() {
       expect(extraerTextoGemini('{}'), isNull);
       expect(extraerTextoGemini('{"candidates":[]}'), isNull);
     });
+
+    test('ignora las partes de "pensamiento" (thought) del modelo', () {
+      final body = jsonEncode({
+        'candidates': [
+          {
+            'content': {
+              'parts': [
+                {'text': 'razonamiento interno', 'thought': true},
+                {'text': 'Respuesta visible.'},
+              ],
+            },
+          },
+        ],
+      });
+      expect(extraerTextoGemini(body), 'Respuesta visible.');
+    });
   });
 
   group('InterpretadorGemini.interpretar', () {
@@ -85,7 +102,7 @@ void main() {
         expect(req.body, contains('Alta corrosividad'));
         return http.Response(
           _respuestaGemini('Corrosividad alta; la conductividad es la '
-              'variable determinante. Es un cribado preliminar.'),
+              'variable determinante. Es una orientación preliminar.'),
           200,
           headers: {'content-type': 'application/json'},
         );
@@ -94,7 +111,7 @@ void main() {
       expect(interprete.disponible, isTrue);
 
       final texto = await interprete.interpretar(_datos);
-      expect(texto, contains('cribado preliminar'));
+      expect(texto, contains('orientación preliminar'));
     });
 
     test('lanza InterpretacionException si no hay conexión', () async {

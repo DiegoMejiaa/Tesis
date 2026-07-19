@@ -131,16 +131,10 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       widget.servicioUbicacion ?? const ServicioUbicacionGeolocator();
 
   // --- Interpretación de apoyo con LLM (capa de PRESENTACIÓN) ---
-  // Redacta 2-3 frases sobre la clasificación difusa ya calculada. No decide
-  // ni cambia la clase; si no hay red/API key, la app funciona igual sin este
-  // texto. Ver logica/interpretador_llm.dart.
+  // Se pide UNA vez al guardar la medición (ya NO en vivo) y se persiste en la
+  // fila. No decide ni cambia la clase difusa. Ver logica/interpretador_llm.dart.
   late final InterpretadorLLM _interpretador =
       widget.interpretador ?? InterpretadorGemini();
-  bool _cargandoInterpretacion = false; // hay una consulta al LLM en curso
-  String? _textoInterpretacion; // último texto generado (null = no hay)
-  bool _errorInterpretacion = false; // la última consulta falló (sin conexión)
-  String? _firmaInterpretada; // firma de la clasificación ya interpretada/en curso
-  Timer? _debounceInterpretacion; // evita llamar al LLM en cada lectura del stream
 
   @override
   void initState() {
@@ -357,89 +351,40 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       // Voltaje: solo si el firmware lo envía; si no, queda como estaba (null).
       if (lectura.voltaje != null) _voltaje = lectura.voltaje;
     });
-    // Capa de apoyo: pide (con debounce) una interpretación en lenguaje natural
-    // de la clasificación difusa recién actualizada. Nunca afecta la lógica.
-    _actualizarInterpretacion();
   }
 
   // ===================================================================
   //  Interpretación de apoyo con LLM (capa de PRESENTACIÓN, no lógica)
+  // -------------------------------------------------------------------
+  //  Se genera UNA vez, al GUARDAR la medición, y se persiste en su fila.
+  //  Corre en segundo plano: la medición ya quedó guardada (interpretacion en
+  //  null); si hay red + API key se completa sola y aparece luego en el
+  //  historial y el reporte. Sin conexión o si falla, queda null. Nunca crashea.
   // ===================================================================
-
-  // "Firma" de una clasificación: si dos lecturas producen la misma firma no
-  // vale la pena pedir otra interpretación. Se redondea para tolerar el ruido
-  // del sensor y no llamar al LLM por variaciones mínimas.
-  String _firmaClasificacion(Clasificacion c) =>
-      '${c.categoria}|${c.score.round()}|${_ce?.round()}|'
-      '${_humedad?.round()}|${_temperatura?.round()}|${_ph?.round()}';
-
-  // Decide si hay que (re)generar la interpretación de apoyo y la agenda con un
-  // debounce para no llamar al LLM en cada lectura del stream Bluetooth.
-  void _actualizarInterpretacion() {
-    if (widget.datosDemo != null) return; // sin red en previsualización/goldens
-    if (!_interpretador.disponible) return; // sin API key configurada: dormido
-
-    final c = _clasificacion;
-    if (c == null) {
-      // Se perdió la lectura (falta humedad o CE): limpia el estado.
-      _debounceInterpretacion?.cancel();
-      _firmaInterpretada = null;
-      if (_textoInterpretacion != null ||
-          _cargandoInterpretacion ||
-          _errorInterpretacion) {
-        setState(() {
-          _textoInterpretacion = null;
-          _cargandoInterpretacion = false;
-          _errorInterpretacion = false;
-        });
-      }
-      return;
-    }
-
-    final firma = _firmaClasificacion(c);
-    if (firma == _firmaInterpretada) return; // ya interpretada o en curso
-    _firmaInterpretada = firma;
-
-    _debounceInterpretacion?.cancel();
-    _debounceInterpretacion = Timer(
-      const Duration(milliseconds: 900),
-      () => _pedirInterpretacion(c, firma),
-    );
-    setState(() {
-      _cargandoInterpretacion = true;
-      _errorInterpretacion = false;
-    });
-  }
-
-  // Llama al LLM. Cualquier fallo (sin conexión, API caída) se captura y solo
-  // marca _errorInterpretacion: la app sigue mostrando la clasificación difusa.
-  Future<void> _pedirInterpretacion(Clasificacion c, String firma) async {
+  void _generarInterpretacionEnSegundoPlano(
+    int id,
+    Medicion m,
+    Clasificacion? clas,
+  ) {
+    if (!_interpretador.disponible || clas == null) return;
     final datos = DatosInterpretacion(
-      clase: nombreCorrosividad(c.categoria),
-      score: c.score.round(),
-      ce: _ce,
-      resistividad: resistividadOhmCm(_ce),
-      humedad: _humedad,
-      temperatura: _temperatura,
-      ph: _ph,
-      variablesAltas: c.variablesAlteradas,
+      clase: nombreCorrosividad(clas.categoria),
+      score: clas.score.round(),
+      ce: m.ce,
+      resistividad: resistividadOhmCm(m.ce),
+      humedad: m.humedad,
+      temperatura: m.temperatura,
+      ph: m.ph,
+      variablesAltas: clas.variablesAlteradas,
     );
-    try {
-      final texto = await _interpretador.interpretar(datos);
-      if (!mounted || firma != _firmaInterpretada) return; // llegó otra lectura
-      setState(() {
-        _textoInterpretacion = texto;
-        _cargandoInterpretacion = false;
-        _errorInterpretacion = false;
-      });
-    } catch (_) {
-      if (!mounted || firma != _firmaInterpretada) return;
-      setState(() {
-        _textoInterpretacion = null;
-        _cargandoInterpretacion = false;
-        _errorInterpretacion = true;
-      });
-    }
+    () async {
+      try {
+        final texto = await _interpretador.interpretar(datos);
+        await BaseDatos.instancia.actualizarInterpretacion(id, texto);
+      } catch (_) {
+        // Sin conexión / API caída: la medición queda sin interpretación.
+      }
+    }();
   }
 
   Future<void> _desconectar() async {
@@ -450,7 +395,6 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
   @override
   void dispose() {
     _temporizadorLectura?.cancel();
-    _debounceInterpretacion?.cancel();
     _conexion?.dispose();
     super.dispose();
   }
@@ -555,14 +499,13 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       return;
     }
 
-    // Módulo 3: clasifica la lectura y guarda la categoría en "condicion".
-    final categoria = (_humedad != null && _ce != null)
-        ? clasificar(
-            humedad: _humedad!,
-            ce: _ce!,
-            temperatura: _temperatura,
-          ).categoria
+    // Módulo 3: clasifica la lectura y guarda la categoría en "condicion". Se
+    // calcula UNA vez la clasificación completa: la categoría va a la fila y la
+    // clasificación se reutiliza para la interpretación de apoyo (más abajo).
+    final clas = (_humedad != null && _ce != null)
+        ? clasificar(humedad: _humedad!, ce: _ce!, temperatura: _temperatura)
         : null;
+    final categoria = clas?.categoria;
 
     // GPS del punto (Módulo 1 / mapa). Si el permiso se niega, el GPS está
     // apagado o hay timeout, devuelve null y la medición se guarda igual.
@@ -583,8 +526,9 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       latitud: coord?.latitud,
       longitud: coord?.longitud,
     );
+    final int idGuardado;
     try {
-      await BaseDatos.instancia.insertar(m);
+      idGuardado = await BaseDatos.instancia.insertar(m);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -593,6 +537,10 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
       }
       return;
     }
+    // La medición ya quedó guardada (interpretacion en null). En segundo plano,
+    // y solo si hay red + API key, se genera la interpretación de apoyo y se
+    // persiste en su fila. Sin conexión: se queda guardada sin interpretación.
+    _generarInterpretacionEnSegundoPlano(idGuardado, m, clas);
     // Suma al contador de mediciones guardadas del punto (se reinicia solo si
     // cambió el terreno o el punto respecto de la última medición guardada).
     final total = _contadorGuardadas.registrar(terreno, punto);
@@ -1285,7 +1233,6 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
               style: TextStyle(color: context.textoFuerte, fontSize: 12),
             ),
           ],
-          _interpretacionApoyo(color),
           const SizedBox(height: 6),
           Text(
             'Clasificación preliminar de corrosividad; no certifica el terreno.',
@@ -1297,105 +1244,6 @@ class _PantallaLecturasState extends State<PantallaLecturas> {
           ),
         ],
       ),
-    );
-  }
-
-  // --- Interpretación de apoyo (cribado preliminar) generada por el LLM ---
-  // Va DEBAJO de la clasificación difusa. Es solo redacción: no cambia la
-  // clase ni el score. Se muestra únicamente si hay algo que mostrar (texto,
-  // carga o error); si no, no ocupa espacio. Nunca crashea sin conexión.
-  Widget _interpretacionApoyo(Color color) {
-    if (!_cargandoInterpretacion &&
-        _textoInterpretacion == null &&
-        !_errorInterpretacion) {
-      return const SizedBox.shrink();
-    }
-
-    final Widget contenido;
-    if (_cargandoInterpretacion) {
-      contenido = Row(
-        children: [
-          SizedBox(
-            width: 13,
-            height: 13,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: context.textoTenue,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Generando interpretación…',
-            style: TextStyle(fontSize: 12, color: context.textoTenue),
-          ),
-        ],
-      );
-    } else if (_errorInterpretacion) {
-      // Sin conexión / API caída: mensaje discreto, la app sigue funcionando.
-      contenido = Row(
-        children: [
-          Icon(Icons.cloud_off_outlined, size: 14, color: context.textoTenue),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Interpretación no disponible sin conexión.',
-              style: TextStyle(fontSize: 12, color: context.textoTenue),
-            ),
-          ),
-        ],
-      );
-    } else {
-      contenido = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _textoInterpretacion!,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.35,
-              color: context.textoFuerte,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Texto generado por IA como apoyo de redacción; no sustituye un '
-            'estudio especializado ni el criterio profesional.',
-            style: TextStyle(
-              fontSize: 10.5,
-              color: context.textoTenue,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        Divider(height: 1, color: color.withValues(alpha: 0.20)),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Icon(Icons.auto_awesome_outlined, size: 14, color: color),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Interpretación de apoyo (cribado preliminar)',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        contenido,
-      ],
     );
   }
 

@@ -16,6 +16,7 @@ import 'package:printing/printing.dart';
 import '../datos/base_datos.dart';
 import '../logica/clasificador_difuso.dart';
 import '../logica/corrosividad.dart';
+import '../logica/interpretador_llm.dart';
 import '../logica/reporte_pdf.dart';
 import '../logica/selector_foto.dart';
 import '../modelos/medicion.dart';
@@ -36,6 +37,12 @@ class PantallaHistorial extends StatefulWidget {
 
 class _PantallaHistorialState extends State<PantallaHistorial> {
   late Future<List<Medicion>> _futuro;
+
+  // Interpretación de apoyo (capa de presentación). Se usa solo para el botón
+  // "Generar interpretación" de las mediciones que se guardaron sin ella (p. ej.
+  // sin conexión). El texto ya guardado se muestra sin necesidad de red.
+  final InterpretadorLLM _interpretador = InterpretadorGemini();
+  final Set<int> _generandoIds = {}; // ids con una generación en curso
 
   @override
   void initState() {
@@ -410,9 +417,117 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
               style: TextStyle(fontSize: 12, color: context.textoTenue),
             ),
           ],
+          _seccionInterpretacion(m, clas),
         ],
       ),
     );
+  }
+
+  // Muestra la interpretación de apoyo GUARDADA (si existe) con su etiqueta y
+  // descargos. Si no hay y hay datos suficientes + API key, ofrece un botón para
+  // generarla ahora (útil para mediciones guardadas sin conexión). En modo demo
+  // no se muestra el botón (no hay red).
+  Widget _seccionInterpretacion(Medicion m, Clasificacion? clas) {
+    final texto = m.interpretacion;
+    if (texto != null && texto.trim().isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          Divider(height: 1, color: context.bordeSuave),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_outlined,
+                  size: 14, color: context.textoTenue),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Interpretación de apoyo (orientación preliminar)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: context.textoTenue,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            texto,
+            style: TextStyle(
+                fontSize: 13, height: 1.35, color: context.textoFuerte),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Texto generado por IA como apoyo; no sustituye un estudio '
+            'especializado ni el criterio profesional.',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: context.textoTenue,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      );
+    }
+    // Sin interpretación guardada: botón para generarla (solo con datos reales,
+    // clasificación disponible y API key configurada).
+    if (widget.demo == null &&
+        clas != null &&
+        m.id != null &&
+        _interpretador.disponible) {
+      final generando = _generandoIds.contains(m.id);
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: generando ? null : () => _generarInterpretacion(m, clas),
+          icon: generando
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.auto_awesome_outlined, size: 16),
+          label: Text(generando ? 'Generando…' : 'Generar interpretación'),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  // Genera la interpretación de una medición ya guardada y la persiste. Si no
+  // hay conexión o falla, avisa discretamente y no cambia nada (no crashea).
+  Future<void> _generarInterpretacion(Medicion m, Clasificacion clas) async {
+    if (m.id == null) return;
+    setState(() => _generandoIds.add(m.id!));
+    final datos = DatosInterpretacion(
+      clase: nombreCorrosividad(clas.categoria),
+      score: clas.score.round(),
+      ce: m.ce,
+      resistividad: resistividadOhmCm(m.ce),
+      humedad: m.humedad,
+      temperatura: m.temperatura,
+      ph: m.ph,
+      variablesAltas: clas.variablesAlteradas,
+    );
+    String? texto;
+    try {
+      texto = await _interpretador.interpretar(datos);
+      await BaseDatos.instancia.actualizarInterpretacion(m.id!, texto);
+    } catch (_) {
+      texto = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _generandoIds.remove(m.id!);
+      if (texto != null) _recargar();
+    });
+    if (texto == null) {
+      _aviso('No se pudo generar la interpretación (revisá la conexión).');
+    }
   }
 
   Widget _chipCondicion(String condicion) {

@@ -69,6 +69,7 @@ Future<Uint8List> construirReportePdf(
             _tabla(grupos[g]!),
             pw.SizedBox(height: 16),
           ],
+        _interpretaciones(mediciones),
         pw.SizedBox(height: 8),
         _pie(),
       ],
@@ -221,6 +222,47 @@ String? _categoria(Medicion m) {
         .categoria;
   }
   return null;
+}
+
+// Sección con las interpretaciones de apoyo GUARDADAS (las que tengan texto).
+// Es solo presentación del texto persistido; si ninguna medición tiene
+// interpretación, la sección no aparece.
+pw.Widget _interpretaciones(List<Medicion> ms) {
+  final conTexto = [
+    for (final m in ms)
+      if (m.interpretacion != null && m.interpretacion!.trim().isNotEmpty) m,
+  ];
+  if (conTexto.isEmpty) return pw.SizedBox();
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text(
+        'Interpretación de apoyo (orientación preliminar)',
+        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+      ),
+      pw.SizedBox(height: 2),
+      pw.Text(
+        'Texto generado por IA como apoyo; no sustituye un estudio '
+        'especializado ni el criterio profesional.',
+        style: pw.TextStyle(
+          fontSize: 8,
+          color: PdfColors.grey700,
+          fontStyle: pw.FontStyle.italic,
+        ),
+      ),
+      pw.SizedBox(height: 8),
+      for (final m in conTexto) ...[
+        pw.Text(
+          '${m.terreno} · Punto ${m.punto}',
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.SizedBox(height: 2),
+        pw.Text(m.interpretacion!.trim(),
+            style: const pw.TextStyle(fontSize: 9)),
+        pw.SizedBox(height: 8),
+      ],
+    ],
+  );
 }
 
 pw.Widget _pie() => pw.Text(

@@ -22,6 +22,9 @@ class Medicion {
   final String? foto; // ruta local de la foto del punto (opcional)
   final double? latitud; // GPS del punto (grados decimales); null si no hubo
   final double? longitud; // permiso/señal al guardar. Registros viejos: null.
+  final String? interpretacion; // texto de apoyo del LLM (orientación
+  // preliminar). Se genera al guardar; null si no hubo red/API key. Es solo
+  // presentación: NO entra a la clasificación difusa (Módulo 3).
 
   Medicion({
     this.id,
@@ -38,6 +41,7 @@ class Medicion {
     this.foto,
     this.latitud,
     this.longitud,
+    this.interpretacion,
   });
 
   /// true si tiene coordenadas válidas (se puede dibujar en el mapa).
@@ -59,6 +63,7 @@ class Medicion {
     'foto': foto,
     'latitud': latitud,
     'longitud': longitud,
+    'interpretacion': interpretacion,
   };
 
   // Reconstruye desde un Map leído de SQLite.
@@ -77,6 +82,7 @@ class Medicion {
     foto: m['foto'] as String?,
     latitud: (m['latitud'] as num?)?.toDouble(),
     longitud: (m['longitud'] as num?)?.toDouble(),
+    interpretacion: m['interpretacion'] as String?,
   );
 
   // Fecha/hora legible para mostrar en pantalla.

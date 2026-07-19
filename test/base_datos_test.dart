@@ -192,4 +192,35 @@ void main() {
     expect(copia.condicion, 'normal');
     expect(copia.foto, '/data/fotos/foto_p3.jpg'); // la foto también
   });
+
+  test('interpretacion: se guarda, se lee y se actualiza (o queda null)',
+      () async {
+    final id = await BaseDatos.instancia.insertar(Medicion(
+      terreno: 'A',
+      punto: 'P1',
+      fechaHora: '2026-07-01T10:00:00',
+      humedad: 45,
+      ce: 500,
+      interpretacion: 'Orientación preliminar de prueba.',
+    ));
+    expect((await BaseDatos.instancia.obtenerTodas()).single.interpretacion,
+        'Orientación preliminar de prueba.');
+
+    // actualizarInterpretacion sobreescribe solo esa columna.
+    await BaseDatos.instancia.actualizarInterpretacion(id, 'Texto nuevo.');
+    expect((await BaseDatos.instancia.obtenerTodas()).single.interpretacion,
+        'Texto nuevo.');
+
+    // Guardar SIN interpretación (caso sin conexión): queda null, no rompe.
+    await _limpiar();
+    await BaseDatos.instancia.insertar(Medicion(
+      terreno: 'B',
+      punto: 'P2',
+      fechaHora: '2026-07-02T10:00:00',
+      humedad: 40,
+      ce: 40,
+    ));
+    expect((await BaseDatos.instancia.obtenerTodas()).single.interpretacion,
+        isNull);
+  });
 }

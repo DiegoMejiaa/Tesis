@@ -30,7 +30,8 @@ class BaseDatos {
       // v2: columna `ph` (pH crudo del sensor).
       // v3: columna `foto` (ruta local de la foto del punto, opcional).
       // v4: columnas `latitud`/`longitud` (GPS del punto, opcionales).
-      version: 4,
+      // v5: columna `interpretacion` (texto de apoyo del LLM, opcional).
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE mediciones (
@@ -47,7 +48,8 @@ class BaseDatos {
             condicion TEXT,
             foto TEXT,
             latitud REAL,
-            longitud REAL
+            longitud REAL,
+            interpretacion TEXT
           )
         ''');
       },
@@ -63,6 +65,11 @@ class BaseDatos {
         if (desde < 4) {
           await db.execute('ALTER TABLE mediciones ADD COLUMN latitud REAL');
           await db.execute('ALTER TABLE mediciones ADD COLUMN longitud REAL');
+        }
+        if (desde < 5) {
+          await db.execute(
+            'ALTER TABLE mediciones ADD COLUMN interpretacion TEXT',
+          );
         }
       },
     );
@@ -82,6 +89,19 @@ class BaseDatos {
     final db = await _baseDatos;
     final filas = await db.query('mediciones', orderBy: 'fecha_hora DESC');
     return filas.map(Medicion.fromMap).toList();
+  }
+
+  // Actualiza SOLO el texto de interpretación de apoyo de una medición. Se usa
+  // cuando la interpretación del LLM llega después de guardar (generación en
+  // segundo plano) o desde el botón "Generar interpretación" del historial.
+  Future<void> actualizarInterpretacion(int id, String? texto) async {
+    final db = await _baseDatos;
+    await db.update(
+      'mediciones',
+      {'interpretacion': texto},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // Borra una medición por id.
