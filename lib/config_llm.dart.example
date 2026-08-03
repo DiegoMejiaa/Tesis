@@ -28,10 +28,11 @@ class ConfigLLM {
     defaultValue: _apiKeyConstante,
   );
 
-  /// Modelo de Gemini a usar. 'gemini-flash-latest' apunta siempre al Flash
-  /// vigente y tiene cuota en el nivel gratuito; 'gemini-2.0-flash' devolvía
-  /// 429 con limit 0. Cambialo acá si querés otro.
-  static const String modelo = 'gemini-flash-latest';
+  /// Modelo de Gemini a usar. 'gemini-flash-lite-latest' no usa tokens de
+  /// "pensamiento" (respuesta completa sin truncar) y tiene cuota gratuita
+  /// generosa. 'gemini-flash-latest' pasó a apuntar a un modelo con
+  /// "thinking" con solo 20 solicitudes/día gratis. Cambialo acá si querés otro.
+  static const String modelo = 'gemini-flash-lite-latest';
 
   /// true si hay una API key configurada (por constante o por --dart-define).
   static bool get hayApiKey => apiKey.trim().isNotEmpty;

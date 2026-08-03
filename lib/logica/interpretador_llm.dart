@@ -104,14 +104,12 @@ class InterpretadorGemini implements InterpretadorLLM {
         },
       ],
       // Tono sobrio y respuesta corta (el prompt pide máximo 60 palabras).
-      // thinkingBudget 0 desactiva el "pensamiento" del modelo: gemini-flash-latest
-      // es un modelo con thinking y, sin esto, los tokens de razonamiento agotan el
-      // presupuesto y la respuesta sale cortada.
+      // Sin thinkingConfig: gemini-flash-lite-latest no gasta tokens en
+      // "pensamiento", así que toda la respuesta sale completa y sin cortes.
       'generationConfig': {
         'temperature': 0.4,
         'topP': 0.9,
         'maxOutputTokens': 400,
-        'thinkingConfig': {'thinkingBudget': 0},
       },
     });
 
